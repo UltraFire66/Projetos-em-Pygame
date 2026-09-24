@@ -1,1 +1,1 @@
-distancia-
+vector(30,30)
