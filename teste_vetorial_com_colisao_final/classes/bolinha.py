@@ -6,15 +6,8 @@ vector = pygame.math.Vector2
 
 class Bolinha:
 
-    centro = vector(0,0)
 
-    vel = vector(5,5)
-    acel = vector(0,0)
-    atrito = vector(1,1)
-    raioDeteccao = 100
-    escalar_velocidade = 4
-
-    def __init__(self,screen,centro,raio,alvo,paredes,obstaculos):
+    def __init__(self,screen,centro,raio,alvo,paredes,obstaculos,raiodeteccao):
         self.centro = centro
         self.raio = raio
         self.alvo = alvo
@@ -22,8 +15,17 @@ class Bolinha:
         self.paredes = paredes
         self.obstaculos = obstaculos
         self.contador = 0 #apenas dedicado a testes e debug
+        self.acelAtracao = 0.05
+        self.acelRepulsao = 0.05
+        self.raioDeteccao = raiodeteccao
+        self.escalar_velocidade = 4
+        self.vel = vector(0,0)
 
-    def update(self):
+    def update(self,agentes):
+
+       
+        #pegando a altura e largura da tela
+        Screenwidth, Screenheight = pygame.display.get_surface().get_size()
 
 
         distancia = (self.alvo.centro - self.centro)
@@ -33,25 +35,48 @@ class Bolinha:
             self.direcao = distancia.normalize()
         else:
             self.direcao = vector(0,0)
+        
 
-               
+        #codigo referente a diminuir  a velocidade da bolinha quando estiver se aproximando do alvo
         
-        if(distancia.length() < self.raioDeteccao): ##se alvo estiver dentro do circulo vermelho, diminui velocidade gradualmente até parar no alvo
-           self.vel = vector( self.escalar_velocidade * (distancia/self.raioDeteccao), self.escalar_velocidade * (distancia/self.raioDeteccao))
-           if(self.vel.length() < 0.05): #previne de diminuir infinitamente
-               self.vel = vector(0,0)
-               self.alvo.update()
-        else:   #se nao estiver dentro do circulo vermelho, bolinha tem velocidade constante
-           self.vel = vector(self.escalar_velocidade,self.escalar_velocidade)       
-        
+        #if(distancia.length() < self.raioDeteccao): ##se alvo estiver dentro do circulo vermelho, diminui velocidade gradualmente até parar no alvo
+           #self.vel = vector( self.escalar_velocidade * (distancia/self.raioDeteccao), self.escalar_velocidade * (distancia/self.raioDeteccao))
+           #if(self.vel.length() < 0.05): #previne de diminuir infinitamente
+               #self.vel = vector(0,0)
+               #self.alvo.update()
+        #else:   #se nao estiver dentro do circulo vermelho, agente é atraído pelo alvo
+           # self.vel = self.vel + self.acel     
+
+
+
+
+        #Início do codigo referente a quicar quando atingir outro agente
+
+        for agente in agentes:
+            distanciaAG = self.centro - agente.centro
+            direcaoAG = vector(0,0)
+            if(distanciaAG.length() > 0):
+                direcaoAG = vector.normalize(distanciaAG)
+            
+            #caso colidam, inverte a velocidade dos dois (colisão perfeita elástica)
+            if(distanciaAG.length() <= (self.raio+agente.raio)):
+                veloc = self.vel.length() + agente.vel.length() #guardando a soma das velocidades para dividir no momento da colisão
+                self.vel = (veloc * (agente.raio/(agente.raio+self.raio)))*direcaoAG #não conserva energia cinética, só distribui a velocidade final de forma inversamente proporcional à massa(apenas para testes)
+                agente.vel = (veloc * (self.raio/(agente.raio+self.raio)))*(-direcaoAG)
+                
+                
+
+
 
         #Início do codigo referente a desviar de obstaculo
 
         direcaoObs = vector(0,0)
 
-        resultante = ((self.vel.length()*10)*self.direcao)
-        
+        fatorDistanciaAlvo =  distancia.length() / math.sqrt(pow(Screenwidth,2) + pow(Screenheight,2))
 
+        resultante = ((self.acelAtracao * fatorDistanciaAlvo)*self.direcao)  #força de atração para o alvo
+        
+        
         for obstaculo in self.obstaculos:
             distanciaObs = (self.centro - obstaculo.centro)
             direcaoObs = vector.normalize(distanciaObs)
@@ -59,9 +84,14 @@ class Bolinha:
             # print(distanciaBordaObs)
             fatorDistanciaObstaculo = ((self.raioDeteccao - distanciaBordaObs)/self.raioDeteccao) #porcentagem que indica o quão próximo do obstaculo a bolinha está (100% quando encostar)
 
+            #conferindo se a bolinha está colidindo com o obstaculo e não deixando ela avançar
+            if(distanciaBordaObs <= 0):
+                self.centro = self.centro + distanciaObs - (obstaculo.raio*direcaoObs)
+
+            
             if(distanciaBordaObs < self.raioDeteccao): # gera o vetor resultante da atração e repulsao quando o obstaculo entra no raio
                 #print(fatorDistanciaObstaculo)
-                resultante += (self.vel.length()*10)*direcaoObs*fatorDistanciaObstaculo
+                resultante += self.acelRepulsao*direcaoObs*fatorDistanciaObstaculo
                 if(direcaoObs == -self.direcao):
                     print("teste : %d",self.contador)
                     self.contador += 1 #apenas um teste 
@@ -69,9 +99,6 @@ class Bolinha:
             
 
         #Inicio do código referente a desviar de parede
-
-       
-
         
         for parede in self.paredes:
             distanciaParede = vector(0,0) 
@@ -105,18 +132,40 @@ class Bolinha:
             direcaoResultante = vector(0,0)
 
 
+        #codigo para fazer a bolinha quicar nas bordas
+        if(self.centro.x > Screenwidth or self.centro.x < 0):
+            self.vel.x = -self.vel.x
+            resultante.x = - resultante.x
+                
+        if(self.centro.y > Screenheight or self.centro.y < 0):
+            self.vel.y = -self.vel.y
+            resultante.y = - resultante.y
+
+
         mouse_x,mouse_y = pygame.mouse.get_pos()
 
-        self.centro  += self.vel.length() * direcaoResultante #oque faz a bolinha se movimentar
-        #self.centro = vector(mouse_x,mouse_y)
+        if(distancia.length() < self.raioDeteccao): #se alvo estiver dentro do circulo vermelho, diminui velocidade gradualmente até parar no alvo
+            self.vel = vector( self.escalar_velocidade * (distancia/self.raioDeteccao), self.escalar_velocidade * (distancia/self.raioDeteccao))
+            if(self.vel.length() < 0.05): #previne de diminuir infinitamente
+                self.vel = vector(0,0)
+                self.alvo.update()
+        else:   #se nao estiver dentro do circulo vermelho, agente é atraído pelo alvo
+           self.vel += resultante    
 
+        self.centro  += self.vel #oque faz a bolinha se movimentar
+
+        #self.centro = vector(mouse_x,mouse_y)
+        
+        #limita a velocidade total da bolinha
+        if(self.vel.length()>3):
+            self.vel = vector.normalize(self.vel) * 3
         
 
         #desenhando tudo na tela
         pygame.draw.circle(self.screen,(255, 255, 0),self.centro,self.raio)
         pygame.draw.circle(self.screen,(255, 0, 0),self.centro,self.raioDeteccao,3)
         draw_arrow(self.screen,self.centro,self.centro+(self.vel.length()*10)*self.direcao,(255,0,0),(0,0,255))
-        draw_arrow(self.screen,self.centro,self.centro+(self.vel.length()*12)*direcaoObs*fatorDistanciaObstaculo,(0,255,0),(0,255,0))
+        #draw_arrow(self.screen,self.centro,self.centro+(self.vel.length()*12)*direcaoObs*fatorDistanciaObstaculo,(0,255,0),(0,255,0))
         #draw_arrow(self.screen,self.centro,self.centro+(self.vel.length()*12)*direcaoParede*fatorDistanciaParede,(0,255,0),(0,255,0))
         draw_arrow(self.screen,self.centro,self.centro+(self.vel.length()*10)*direcaoResultante,(0,255,255),(0,255,255))
 
